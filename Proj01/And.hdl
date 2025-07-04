@@ -1,0 +1,11 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+CHIP And {
+    IN a, b;
+    OUT out;
+    
+    PARTS:
+    Nand(a=a, b=b, out=w);
+    Nand(a=w, b=w, out=out);
+}

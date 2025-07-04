@@ -1,0 +1,1 @@
+# This porject covers implementing basic arithmatic functions and an ALU ( arithmetic logic unit)

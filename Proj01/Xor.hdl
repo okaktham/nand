@@ -1,0 +1,18 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+
+CHIP Xor {
+    IN a,b;
+    OUT out;
+
+    PARTS:
+    Not(in=a, out=abar);
+    Not(in=b, out=bbar);
+
+    And(a=a, b=bbar, out=w1);
+    And(a=abar, b=b, out=w2);
+
+    Or(a=w1, b=w2, out=out);
+}
+

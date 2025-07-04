@@ -1,0 +1,17 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+
+CHIP Or {
+    IN a,b;
+    OUT out;
+
+    PARTS:
+    Not(in=a, out=abar);
+    Not(in=b, out=bbar);
+
+    And(a=abar, b=bbar, out=w);
+
+    Not(in=w, out=out);
+
+}
