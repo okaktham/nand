@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from SymbolTable import SymbolTable
 from sys import argv, exit
 from Code import Code
 
@@ -19,16 +20,11 @@ class C(Command):
 
 
 class Parser:
-    def __init__(self, path):
-        with open(path, "r") as f:
-            contents = f.read()
-            if not contents.strip():
-                print("Empty file")
-                exit(1)
-            self.commands = contents.strip().split("\n")
-            self.instruction = -1
-            self.current = None
-            self.advance()
+    def __init__(self, content):
+        self.commands = content.split("\n")
+        self.instruction = -1
+        self.current = None
+        self.advance()
 
     def has_more_commands(self) -> bool:
         return self.instruction + 1 < len(self.commands)
@@ -46,7 +42,9 @@ class Parser:
 
     @staticmethod
     def command_type(command: str) -> Command:
-        command = command.split("//")[0]
+        command = command.split("//")[0].strip()
+        if not command:
+            return A("")
         if command.startswith("@"):
             return A(command[1:].strip())
         if command.startswith("(") and command.endswith(")"):
@@ -56,46 +54,76 @@ class Parser:
     def symbol(self) -> str:
         if isinstance(self.current, (A, L)):
             return self.current.value
+        return None
 
-    def comp(self) -> str:
-        if isinstance(self.current, C):
-            code = self.current.value
-            if "=" in code:
-                code = code.split("=")[1].split(";")[0].strip()
-            elif ";" in code:
-                code = code.split(";")[0].strip()
-            else:
-                print(f"Invalid C-instruction syntax at line: {self.instruction + 1}")
-                exit(1)
-            exists = Code.comp(code)
-            if not exists:
-                print(f"{self.instruction + 1}: {code} UNDEFINED") 
-                exit(1)
-            return exists
 
-    def jump(self) -> str:
-        if isinstance(self.current, C):
-            value = self.current.value
-            if ";" in value:
-                code = value.split(";")[1].strip()
-                exists = Code.jump(code)
-                if not exists:
-                    print(f"{self.instruction + 1}: {code} UNDEFINED") 
+def single_pass(content: str):
+    table = SymbolTable()
+    parser = Parser(content)
+
+    rom_address = 0
+    ram_address = 16
+    result = []
+
+    while True:
+        cmd = parser.current
+
+        if isinstance(cmd, L):
+            if not table.contains(cmd.value):
+                table.add_entry(cmd.value, rom_address)
+        else:
+            if isinstance(cmd, A):
+                sym = cmd.value
+                if not sym.isdigit():
+                    if not table.contains(sym):
+                        table.add_entry(sym, ram_address)
+                        ram_address += 1
+                    cmd = A(str(table.get_address(sym)))
+            result.append(cmd)
+            rom_address += 1
+
+        if not parser.has_more_commands():
+            break
+        parser.advance()
+
+    return result
+
+
+def parse_C_parts(value: str):
+    dest = ""
+    comp = ""
+    jump = ""
+
+    if "=" in value:
+        dest, rest = value.split("=", 1)
+    else:
+        rest = value
+
+    if ";" in rest:
+        comp, jump = rest.split(";", 1)
+    else:
+        comp = rest
+
+    return dest.strip(), comp.strip(), jump.strip()
+
+
+def pass2(commands, outpath):
+    with open(outpath, "w") as output:
+        for cmd in commands:
+            if isinstance(cmd, A):
+                output.write(f"{int(cmd.value):016b}\n")
+            elif isinstance(cmd, C):
+                dest, comp, jump = parse_C_parts(cmd.value)
+                comp_bits = Code.comp(comp)
+                dest_bits = Code.dest(dest)
+                jump_bits = Code.jump(jump)
+
+                if not comp_bits or not dest_bits or not jump_bits:
+                    print(f"Invalid C-instruction: {cmd.value}")
                     exit(1)
-                return exists
-        return "000"
 
-    def dest(self) -> str:
-        if isinstance(self.current, C):
-            value = self.current.value
-            if "=" in value:
-                code = value.split("=")[0].strip()
-                exists = Code.dest(code)
-                if not exists:
-                    print(f"{self.instruction + 1}: {code} UNDEFINED") 
-                    exit(1)
-                return exists
-        return "000"
+                output.write(f"111{comp_bits}{dest_bits}{jump_bits}\n")
+
 
 def main():
     if len(argv) != 2:
@@ -107,25 +135,18 @@ def main():
         print("Invalid file extension. Only .asm files are allowed.")
         exit(1)
 
-    parsed = Parser(path)
-    out = path.split(".")[0]
+    with open(path, "r") as f:
+        content = f.read().strip()
+        if not content:
+            print("Empty file")
+            exit(1)
 
-    try:
-        with open(f"{out}.hack", "w") as output:
-            while True:
-                command = parsed.current
-                if isinstance(command, A):
-                    address = int(parsed.symbol())
-                    output.write(f"{address:016b}\n")
-                elif isinstance(command, C):
-                    output.write(f"111{parsed.comp()}{parsed.dest()}{parsed.jump()}\n")
+    commands = single_pass(content)
+    outpath = path.replace(".asm", ".hack")
+    pass2(commands, outpath)
 
-                if not parsed.has_more_commands():
-                    break
-                parsed.advance()
-    except Exception as e:
-        print(f"Could not compile: {path}\nError: {e}")
-        exit(1)
+    print(f"Wrote: {outpath}")
+
 
 if __name__ == "__main__":
     main()
